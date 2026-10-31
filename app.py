@@ -39,14 +39,14 @@ os.makedirs(data_dir, exist_ok=True)
 os.makedirs(known_faces_dir, exist_ok=True)
 
 # create files if not exists
-if not os.path.exists(students_file):
+if not os.path.exists(students_file) or os.path.getsize(students_file) == 0:
     with open(students_file, 'w') as f:
         json.dump([], f)
 
 if not os.path.exists(attendance_file):
     with open(attendance_file, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['Name', 'Roll Number', 'Date', 'Time'])
+        writer.writerow(['Name', 'Roll Number', 'Date', 'Time', 'Hour Slot'])
 
 known_encodings = []
 known_students = []
@@ -140,8 +140,11 @@ def load_known_faces():
     known_students = []
 
     try:
-        with open(students_file, 'r') as f:
-            students = json.load(f)
+        try:
+            with open(students_file, 'r') as f:
+                students = json.load(f)
+        except:
+            students = []
     except:
         students = []
 
@@ -214,8 +217,11 @@ def register():
             return jsonify({'success': False, 'message': 'No face detected. Please face the camera properly.'}), 400
 
         # check duplicate roll number
-        with open(students_file, 'r') as f:
-            students = json.load(f)
+        try:
+            with open(students_file, 'r') as f:
+                students = json.load(f)
+        except:
+            students = []
 
         for s in students:
             if s['roll_number'] == roll_number:
@@ -264,30 +270,38 @@ def recognize():
                 now = datetime.now()
                 date_str = now.strftime('%Y-%m-%d')
                 time_str = now.strftime('%H:%M:%S')
+                start_h = now.hour
+                end_h = (start_h + 1) % 24
+                hour_slot = f"{start_h:02d}:00 - {end_h:02d}:00"
+                hour_prefix = f"{start_h:02d}"
 
-                # check if already marked today
+                # check if already marked in this hour today
                 already_marked = False
                 try:
                     with open(attendance_file, 'r', newline='') as f:
                         reader = csv.reader(f)
                         next(reader, None)
                         for row in reader:
-                            if len(row) >= 3 and row[1].strip() == roll_number and row[2].strip() == date_str:
-                                already_marked = True
-                                break
+                            if len(row) >= 4 and row[1].strip() == roll_number and row[2].strip() == date_str:
+                                row_time = row[3].strip()
+                                row_slot = row[4].strip() if len(row) >= 5 else ''
+                                if row_time.startswith(hour_prefix) or row_slot == hour_slot:
+                                    already_marked = True
+                                    break
                 except:
                     pass
 
-                # update spreadsheet
+                # update spreadsheet if not already marked for this hour
                 if not already_marked:
                     with open(attendance_file, 'a', newline='') as f:
                         writer = csv.writer(f)
-                        writer.writerow([name, roll_number, date_str, time_str])
+                        writer.writerow([name, roll_number, date_str, time_str, hour_slot])
 
                 recognized.append({
                     'name': name,
                     'roll_number': roll_number,
                     'time': time_str,
+                    'hour_slot': hour_slot,
                     'already_marked': already_marked
                 })
             else:
@@ -302,6 +316,7 @@ def recognize():
 def get_attendance():
     try:
         date_filter = request.args.get('date', '').strip()
+        hour_filter = request.args.get('hour', '').strip()
         if not date_filter:
             date_filter = datetime.now().strftime('%Y-%m-%d')
 
@@ -312,17 +327,34 @@ def get_attendance():
                 next(reader, None)
                 for row in reader:
                     if len(row) >= 4:
-                        if not date_filter or row[2].strip() == date_filter:
-                            records.append({
-                                'name': row[0].strip(),
-                                'roll_number': row[1].strip(),
-                                'date': row[2].strip(),
-                                'time': row[3].strip()
-                            })
+                        row_date = row[2].strip()
+                        row_time = row[3].strip()
+                        if len(row) >= 5 and row[4].strip():
+                            row_slot = row[4].strip()
+                        else:
+                            h = int(row_time[:2]) if ':' in row_time else 0
+                            row_slot = f"{h:02d}:00 - {(h + 1) % 24:02d}:00"
+
+                        # filter by date
+                        if date_filter and row_date != date_filter:
+                            continue
+
+                        # filter by hour if specified
+                        if hour_filter and hour_filter != 'all':
+                            if hour_filter != row_slot and not row_time.startswith(hour_filter):
+                                continue
+
+                        records.append({
+                            'name': row[0].strip(),
+                            'roll_number': row[1].strip(),
+                            'date': row_date,
+                            'time': row_time,
+                            'hour_slot': row_slot
+                        })
         except:
             pass
 
-        return jsonify({'success': True, 'records': records, 'date': date_filter})
+        return jsonify({'success': True, 'records': records, 'date': date_filter, 'hour': hour_filter})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
@@ -340,8 +372,11 @@ def download_attendance():
 @app.route('/api/students', methods=['GET'])
 def get_students():
     try:
-        with open(students_file, 'r') as f:
-            students = json.load(f)
+        try:
+            with open(students_file, 'r') as f:
+                students = json.load(f)
+        except:
+            students = []
         return jsonify({'success': True, 'students': students, 'count': len(students)})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
@@ -350,8 +385,11 @@ def get_students():
 @app.route('/api/students/<roll_number>', methods=['DELETE'])
 def delete_student(roll_number):
     try:
-        with open(students_file, 'r') as f:
-            students = json.load(f)
+        try:
+            with open(students_file, 'r') as f:
+                students = json.load(f)
+        except:
+            students = []
 
         updated = [s for s in students if s['roll_number'] != roll_number]
         if len(updated) == len(students):

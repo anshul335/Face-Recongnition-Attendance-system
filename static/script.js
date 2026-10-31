@@ -35,6 +35,7 @@ function cacheDOMElements() {
         scanningIndicator: $('#scanning-indicator'),
         recognitionResults: $('#recognition-results'),
         datePicker: $('#date-picker'),
+        hourFilter: $('#hour-filter'),
         attendanceTbody: $('#attendance-tbody'),
         noRecords: $('#no-records'),
         attendanceTable: $('#attendance-table'),
@@ -335,15 +336,18 @@ function displayRecognitionResult(recognized) {
                 </div>`;
         } else {
             const isAlready = person.already_marked;
+            const slot = person.hour_slot || '';
             const cardClass = isAlready ? 'already' : '';
             const badgeClass = isAlready ? 'badge-warning' : 'badge-success';
-            const badgeText = isAlready ? 'Already Marked Today' : '✓ Attendance Marked';
+            const badgeText = isAlready 
+                ? (slot ? `Already Marked (${slot})` : 'Already Marked (This Hour)') 
+                : (slot ? `✓ Marked (${slot})` : '✓ Attendance Marked');
             html += `
                 <div class="result-card ${cardClass}">
                     <div class="result-info">
                         <div class="result-name">${escapeHtml(person.name)}</div>
                         <div class="result-roll">Roll: ${escapeHtml(person.roll_number)}</div>
-                        <div class="result-time">Time: ${escapeHtml(person.time || '')}</div>
+                        <div class="result-time">Time: ${escapeHtml(person.time || '')} ${slot ? `• ${escapeHtml(slot)}` : ''}</div>
                     </div>
                     <span class="badge ${badgeClass}">${badgeText}</span>
                 </div>`;
@@ -359,14 +363,30 @@ function initDatePicker() {
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     els.datePicker.value = `${year}-${month}-${day}`;
+
+    // populate hour filter dropdown
+    if (els.hourFilter && els.hourFilter.options.length <= 1) {
+        let opts = '<option value="">All Hours</option>';
+        for (let h = 0; h < 24; h++) {
+            const hStr = String(h).padStart(2, '0');
+            const nextStr = String((h + 1) % 24).padStart(2, '0');
+            const slot = `${hStr}:00 - ${nextStr}:00`;
+            opts += `<option value="${slot}">${slot}</option>`;
+        }
+        els.hourFilter.innerHTML = opts;
+    }
 }
 
 async function loadAttendanceRecords() {
     const date = els.datePicker.value;
     if (!date) return;
+    const hour = els.hourFilter ? els.hourFilter.value : '';
 
     try {
-        const res = await fetch(`/api/attendance?date=${date}`);
+        const url = hour 
+            ? `/api/attendance?date=${encodeURIComponent(date)}&hour=${encodeURIComponent(hour)}` 
+            : `/api/attendance?date=${encodeURIComponent(date)}`;
+        const res = await fetch(url);
         const data = await res.json();
 
         if (data.success && data.records && data.records.length > 0) {
@@ -380,12 +400,14 @@ async function loadAttendanceRecords() {
                 const roll = rec.roll_number || rec['Roll Number'] || '';
                 const recDate = rec.date || rec.Date || date;
                 const recTime = rec.time || rec.Time || '';
+                const recSlot = rec.hour_slot || rec['Hour Slot'] || (recTime.length >= 2 ? `${recTime.slice(0, 2)}:00 - ${(parseInt(recTime.slice(0, 2)) + 1) % 24}:00` : '');
                 rows += `<tr>
                     <td>${i + 1}</td>
                     <td>${escapeHtml(name)}</td>
                     <td>${escapeHtml(roll)}</td>
                     <td>${escapeHtml(recDate)}</td>
                     <td>${escapeHtml(recTime)}</td>
+                    <td><span class="badge badge-info">${escapeHtml(recSlot)}</span></td>
                 </tr>`;
             });
             els.attendanceTbody.innerHTML = rows;
@@ -460,7 +482,7 @@ function downloadCSV() {
         return;
     }
 
-    let csv = 'S.No,Name,Roll Number,Date,Time\n';
+    let csv = 'S.No,Name,Roll Number,Date,Time,Hour Slot\n';
     rows.forEach((row) => {
         const cells = row.querySelectorAll('td');
         const line = Array.from(cells)

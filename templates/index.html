@@ -123,6 +123,9 @@
                 <div class="records-toolbar">
                     <div class="toolbar-left">
                         <input type="date" id="date-picker" class="date-input">
+                        <select id="hour-filter" class="date-input" onchange="loadAttendanceRecords()">
+                            <option value="">All Hours</option>
+                        </select>
                         <button class="btn btn-primary" id="load-records-btn" onclick="loadAttendanceRecords()">
                             <i class="fas fa-sync-alt"></i> Load Records
                         </button>
@@ -152,6 +155,7 @@
                                 <th>Roll Number</th>
                                 <th>Date</th>
                                 <th>Time</th>
+                                <th>Hour Slot</th>
                             </tr>
                         </thead>
                         <tbody id="attendance-tbody">
