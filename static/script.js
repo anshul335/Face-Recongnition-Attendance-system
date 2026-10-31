@@ -354,8 +354,11 @@ function displayRecognitionResult(recognized) {
 
 // records and students
 function initDatePicker() {
-    const today = new Date().toISOString().slice(0, 10);
-    els.datePicker.value = today;
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    els.datePicker.value = `${year}-${month}-${day}`;
 }
 
 async function loadAttendanceRecords() {

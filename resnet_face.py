@@ -9,7 +9,7 @@ try:
 except Exception:
     pass
 
-# Resnet Architecture for face recognition 
+# Resnet Architecture for face recognition (Lab 10 style)
 class myResnet20(nn.Module):
     def __init__(self, embedding_dim=128):
         super(myResnet20, self).__init__()
@@ -114,112 +114,37 @@ class myResnet20(nn.Module):
             nn.BatchNorm2d(64)
         )
 
-        # Block4 (64 -> 128 channels, stride=2 downsamples spatial dims)
-        # Stage 1
-        self.b4_s1 = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(128)
-        )
-
-        # 1x1 projection shortcut for dimension change
-        self.b4_shortcut = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=1, stride=2, bias=False),
-            nn.BatchNorm2d(128)
-        )
-
-        # stage 2
-        self.b4_s2 = nn.Sequential(
-            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(128)
-        )
-
-        # stage 3
-        self.b4_s3 = nn.Sequential(
-            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(128)
-        )
-
-        # Global Average Pooling and Fully Connected Layer
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(128, embedding_dim)
+        # spatial pooling across stages to capture face geometry
+        self.pool_b2 = nn.AdaptiveAvgPool2d((4, 4)) # 32*16 = 512
+        self.pool_b3 = nn.AdaptiveAvgPool2d((2, 2)) # 64*4 = 256
+        self.fc = nn.Linear(512 + 256, embedding_dim)
 
     def forward(self, x):
         # Initial conv
         out = F.relu(self.bn1(self.conv1(x)))
 
-        # Block1 Stage1 (identity shortcut)
-        identity = out
-        out = self.b1_s1(out)
-        out = F.relu(out + identity)
+        # Block1
+        out = F.relu(self.b1_s1(out) + out)
+        out = F.relu(self.b1_s2(out) + out)
+        out = F.relu(self.b1_s3(out) + out)
 
-        # Block1 Stage2
-        identity = out
-        out = self.b1_s2(out)
-        out = F.relu(out + identity)
+        # Block2
+        id2 = self.b2_shortcut(out)
+        out = F.relu(self.b2_s1(out) + id2)
+        out = F.relu(self.b2_s2(out) + out)
+        out = F.relu(self.b2_s3(out) + out)
+        f_b2 = self.pool_b2(out)
 
-        # Block1 Stage3
-        identity = out
-        out = self.b1_s3(out)
-        out = F.relu(out + identity)
+        # Block3
+        id3 = self.b3_shortcut(out)
+        out = F.relu(self.b3_s1(out) + id3)
+        out = F.relu(self.b3_s2(out) + out)
+        out = F.relu(self.b3_s3(out) + out)
+        f_b3 = self.pool_b3(out)
 
-        # Block2 Stage1 (projection shortcut: 16->32, stride 2)
-        identity = self.b2_shortcut(out)
-        out = self.b2_s1(out)
-        out = F.relu(out + identity)
-
-        # Block2 Stage2
-        identity = out
-        out = self.b2_s2(out)
-        out = F.relu(out + identity)
-
-        # Block2 Stage3
-        identity = out
-        out = self.b2_s3(out)
-        out = F.relu(out + identity)
-
-        # Block3 Stage1 (projection shortcut: 32->64, stride 2)
-        identity = self.b3_shortcut(out)
-        out = self.b3_s1(out)
-        out = F.relu(out + identity)
-
-        # Block3 Stage2
-        identity = out
-        out = self.b3_s2(out)
-        out = F.relu(out + identity)
-
-        # Block3 Stage3
-        identity = out
-        out = self.b3_s3(out)
-        out = F.relu(out + identity)
-
-        # Block4 Stage1 (projection shortcut: 64->128, stride 2)
-        identity = self.b4_shortcut(out)
-        out = self.b4_s1(out)
-        out = F.relu(out + identity)
-
-        # Block4 Stage2
-        identity = out
-        out = self.b4_s2(out)
-        out = F.relu(out + identity)
-
-        # Block4 Stage3
-        identity = out
-        out = self.b4_s3(out)
-        out = F.relu(out + identity)
-
-        out = self.avgpool(out)
-        out = torch.flatten(out, 1)
-        out = self.fc(out)
-        out = F.normalize(out, p=2, dim=1) # normalize for face embedding
+        feat = torch.cat([torch.flatten(f_b2, 1), torch.flatten(f_b3, 1)], dim=1)
+        out = self.fc(feat)
+        out = F.normalize(out, p=2, dim=1)
         return out
 
 
