@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition Attendance System</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <!-- header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="header-icon">
+                <i class="fas fa-user-shield"></i>
+            </div>
+            <h1>Face Recognition Attendance System</h1>
+            <p class="subtitle">Smart attendance tracking powered by AI</p>
+        </div>
+    </header>
+
+    <!-- tab navigation -->
+    <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="register" onclick="switchTab('register')">
+            <span>📋</span> Register Student
+        </button>
+        <button class="tab-btn" data-tab="attendance" onclick="switchTab('attendance')">
+            <span>📸</span> Mark Attendance
+        </button>
+        <button class="tab-btn" data-tab="records" onclick="switchTab('records')">
+            <span>📊</span> View Records
+        </button>
+    </nav>
+
+    <!-- main content -->
+    <main class="content">
+
+        <!-- tab 1: register student -->
+        <section id="register-section" class="tab-content active">
+            <div class="card">
+                <h2 class="card-title"><i class="fas fa-user-plus"></i> Register New Student</h2>
+                <div class="register-grid">
+                    <!-- Left Column: Camera -->
+                    <div class="register-camera-col">
+                        <div class="camera-container" id="register-camera-container">
+                            <video id="register-video" autoplay playsinline muted></video>
+                            <canvas id="register-canvas" style="display:none;"></canvas>
+                            <div class="camera-overlay" id="register-overlay">
+                                <i class="fas fa-camera"></i>
+                                <p>Camera Loading...</p>
+                            </div>
+                        </div>
+                        <div class="camera-controls">
+                            <button class="capture-btn" id="capture-btn" title="Capture Photo">
+                                <i class="fas fa-camera"></i>
+                            </button>
+                        </div>
+                        <img id="captured-preview" class="captured-preview" alt="Captured Photo" style="display:none;">
+                        <button class="btn btn-secondary" id="retake-btn" style="display:none;">
+                            <i class="fas fa-redo"></i> Retake Photo
+                        </button>
+                    </div>
+
+                    <!-- Right Column: Form -->
+                    <div class="register-form-col">
+                        <div class="form-group">
+                            <label for="student-name"><i class="fas fa-user"></i> Full Name</label>
+                            <input type="text" id="student-name" placeholder="Enter student's full name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="roll-number"><i class="fas fa-id-badge"></i> Roll Number</label>
+                            <input type="text" id="roll-number" placeholder="Enter roll number" required>
+                        </div>
+                        <button class="btn btn-primary btn-lg" id="register-btn" disabled>
+                            <i class="fas fa-user-check"></i> Register Student
+                        </button>
+                        <div id="register-status" class="status-message"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- tab 2: mark attendance -->
+        <section id="attendance-section" class="tab-content" style="display:none;">
+            <div class="card">
+                <h2 class="card-title"><i class="fas fa-clipboard-check"></i> Mark Attendance</h2>
+                <div class="attendance-layout">
+                    <div class="camera-container" id="attendance-camera-container">
+                        <video id="attendance-video" autoplay playsinline muted></video>
+                        <canvas id="attendance-canvas" style="display:none;"></canvas>
+                        <div class="camera-overlay" id="attendance-overlay">
+                            <i class="fas fa-camera"></i>
+                            <p>Camera Loading...</p>
+                        </div>
+                        <div class="scanning-indicator" id="scanning-indicator" style="display:none;">
+                            <span class="pulse-dot"></span> Scanning...
+                        </div>
+                    </div>
+                    <div class="attendance-controls">
+                        <button class="btn btn-success" id="start-recognition-btn">
+                            <i class="fas fa-play"></i> Start Recognition
+                        </button>
+                        <button class="btn btn-danger" id="stop-recognition-btn" style="display:none;">
+                            <i class="fas fa-stop"></i> Stop
+                        </button>
+                    </div>
+                    <div id="recognition-results" class="recognition-results">
+                        <div class="empty-state">
+                            <i class="fas fa-face-smile"></i>
+                            <p>Start recognition to mark attendance</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- tab 3: view records -->
+        <section id="records-section" class="tab-content" style="display:none;">
+            <div class="card">
+                <h2 class="card-title"><i class="fas fa-chart-bar"></i> Attendance Records</h2>
+                <div class="records-toolbar">
+                    <div class="toolbar-left">
+                        <input type="date" id="date-picker" class="date-input">
+                        <button class="btn btn-primary" id="load-records-btn" onclick="loadAttendanceRecords()">
+                            <i class="fas fa-sync-alt"></i> Load Records
+                        </button>
+                    </div>
+                    <div class="toolbar-right">
+                        <button class="btn btn-secondary" id="download-csv-btn" onclick="downloadCSV()">
+                            <i class="fas fa-download"></i> Download CSV
+                        </button>
+                    </div>
+                </div>
+                <div class="stats-bar">
+                    <div class="stat-item">
+                        <i class="fas fa-users"></i>
+                        <span>Total Students: <strong id="total-students">0</strong></span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-calendar-check"></i>
+                        <span>Attendance Today: <strong id="attendance-count">0</strong></span>
+                    </div>
+                </div>
+                <div class="table-wrapper">
+                    <table id="attendance-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Name</th>
+                                <th>Roll Number</th>
+                                <th>Date</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendance-tbody">
+                        </tbody>
+                    </table>
+                    <div class="empty-state" id="no-records" style="display:none;">
+                        <i class="fas fa-calendar-xmark"></i>
+                        <p>No attendance records for this date</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Registered Students Section -->
+            <div class="card">
+                <h2 class="card-title"><i class="fas fa-graduation-cap"></i> Registered Students</h2>
+                <div class="students-grid" id="students-grid">
+                    <div class="empty-state" id="no-students">
+                        <i class="fas fa-user-slash"></i>
+                        <p>No students registered yet</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- toast notifications -->
+    <div id="toast-container"></div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
